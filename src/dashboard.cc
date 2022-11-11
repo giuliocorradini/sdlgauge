@@ -15,6 +15,8 @@ const float max_rpm = 6000;
 
 const int power = 10;
 
+const int MAX_SPEED = 75;
+
 float needle_angle(float target_rpm) {
     const float base_angle = -30;
 
@@ -218,6 +220,38 @@ void draw_needle(SDL_Renderer * &renderer, int rpm) {
     SDL_RenderCopyExF(renderer, assets::needle, NULL, &needle_target_position, needle_angle(rpm), &needle_rot_center, SDL_FLIP_NONE);
 };
 
+void draw_speedometer(SDL_Renderer * &renderer, int rpm) {
+    using namespace assets;
+
+    int speed = rpm / max_rpm * MAX_SPEED;
+    
+    //Select digits
+    SDL_Texture *ten = speedometer_digits.at(speed / 10 % 10);
+    int tenx, teny;
+    SDL_QueryTexture(ten, nullptr, nullptr, &tenx, &teny);
+
+    SDL_Texture *unit = speedometer_digits.at(speed % 10);
+    int unitx, unity;
+    SDL_QueryTexture(unit, nullptr, nullptr, &unitx, &unity);
+
+    SDL_FRect tens_target = {
+        .x = static_cast<float>(WINDOW_WIDTH / 2 - tenx),
+        .y = static_cast<float>((WINDOW_HEIGHT - teny) / 2.),
+        .w = static_cast<float>(tenx),
+        .h = static_cast<float>(teny)
+    };
+    SDL_FRect units_target = {
+        .x = static_cast<float>((WINDOW_WIDTH - (speed>=10 ? 0 : unitx)) / 2),
+        .y = static_cast<float>((WINDOW_HEIGHT - unity) / 2.),
+        .w = static_cast<float>(unitx),
+        .h = static_cast<float>(unity)
+    };
+
+    if(speed >= 10)
+        SDL_RenderCopyF(renderer, ten, NULL, &tens_target);
+    SDL_RenderCopyF(renderer, unit, NULL, &units_target);
+}
+
 int main() {
 
     /* SDL object reference */
@@ -248,17 +282,18 @@ int main() {
 
     SDL_RenderPresent(renderer);
 
-    int nang = -30;
-
     /* process event loop */
     while(!event_loop()) {
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xff);
         SDL_RenderClear(renderer);
+
         draw_base(renderer);
 
         draw_needle(renderer, revs);
         if(revving) rev_up();
         else        rev_down();
+
+        draw_speedometer(renderer, revs);
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);  //60 fps
