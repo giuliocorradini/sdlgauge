@@ -11,10 +11,12 @@ using namespace std;
 
 const int WINDOW_HEIGHT = 500;
 const int WINDOW_WIDTH = 500;
+const float max_rpm = 6000;
+
+const int power = 10;
 
 float needle_angle(float target_rpm) {
     const float base_angle = -30;
-    const float max_rpm = 6000;
 
     return target_rpm / max_rpm * 240 + base_angle;
 }
@@ -62,6 +64,42 @@ bool setup(SDL_Window * &window, SDL_Surface * &surface, SDL_Renderer * &rendere
     return true;
 }
 
+bool revving = false;
+int revs = 0;
+
+void rev_up() {
+    revs += power;
+    if(revs >= 6000)
+        revs = 6000;
+}
+
+void rev_down() {
+    revs -= power;
+    if(revs < 0)
+        revs = 0;
+}
+
+void process_key_fsm(SDL_KeyboardEvent &e) {
+    static int status = 0;
+
+    switch(status) {
+        case 0:
+            if(e.keysym.sym == SDLK_SPACE && e.type == SDL_KEYDOWN) {
+                status = 1;
+                revving = true;
+            }
+            break;
+        case 1:
+            if(e.keysym.sym == SDLK_SPACE && e.type == SDL_KEYUP) {
+                status = 0;
+                revving = false;
+            }
+            break;
+        default:
+            status = 0;
+    }
+}
+
 bool event_loop() {
     SDL_Event e;
     bool quit = false;
@@ -71,6 +109,10 @@ bool event_loop() {
             case SDL_QUIT:
                 quit = true;
                 break;
+            case SDL_KEYDOWN:
+            case SDL_KEYUP:
+                process_key_fsm((SDL_KeyboardEvent &)e);
+                break;
         }
     }
 
@@ -79,9 +121,7 @@ bool event_loop() {
 
 
 namespace assets {          //this order follows the design order bottom-up
-    SDL_Texture *bezel;
-    SDL_Texture *inner_ring;
-    SDL_Texture *overlay;
+    SDL_Texture *base;
     SDL_Texture *needle;
     SDL_Texture *outer_sweep;
     SDL_Texture *inner_sweep;
@@ -131,10 +171,8 @@ void load_assets(SDL_Renderer * &renderer) {
         assets::speedometer_digits.at(i) = load_optimized_asset(renderer, digits_filename.at(i).c_str());
     }
 
-    assets::bezel = load_optimized_asset(renderer, "assets/bezel.png");
-    assets::overlay = load_optimized_asset(renderer, "assets/overlay_digits.png");
-    assets::inner_ring = load_optimized_asset(renderer, "assets/inner_ring.png");
 
+    assets::base = load_optimized_asset(renderer, "assets/base.png");
     assets::needle = load_optimized_asset(renderer, "assets/needle.png");
 
     assets::outer_sweep = load_optimized_asset(renderer, "assets/outer_sweep.png");
@@ -142,14 +180,8 @@ void load_assets(SDL_Renderer * &renderer) {
 }
 
 void draw_base(SDL_Renderer * &renderer) {
-    static SDL_Rect bezel_pos = {.x=0, .y=0, .w=500, .h=376};
-    SDL_RenderCopy(renderer, assets::bezel, NULL, &bezel_pos);
-
-    static SDL_Rect inner_ring_position = {.x=36, .y=39, .w=428, .h=318};
-    SDL_RenderCopy(renderer, assets::inner_ring, NULL, &inner_ring_position);
-
-    static SDL_Rect overlay_position = {.x=3, .y=0, .w=494, .h=384};
-    SDL_RenderCopy(renderer, assets::overlay, NULL, &overlay_position);
+    static SDL_Rect base_pos = {.x=0, .y=0, .w=500, .h=500};
+    SDL_RenderCopy(renderer, assets::base, NULL, &base_pos);
 };
 
 SDL_Texture *sweep;
@@ -224,16 +256,9 @@ int main() {
         SDL_RenderClear(renderer);
         draw_base(renderer);
 
-        draw_sweep(renderer, nang);
-        draw_needle(renderer, nang);
-        nang += 2;
-        if(nang >= 210)
-            nang = -30;
-
-        //prepare pie mask
-        SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
-        circle::plot_crown_sector(renderer, 250, 250, 250, 216, -30, 210);  //outer
-        circle::plot_crown_sector(renderer, 250, 250, 213, 161, -30, 210);  //inner
+        draw_needle(renderer, revs);
+        if(revving) rev_up();
+        else        rev_down();
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);  //60 fps
