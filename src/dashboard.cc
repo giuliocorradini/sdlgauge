@@ -41,7 +41,7 @@ bool setup(SDL_Window * &window, SDL_Surface * &surface, SDL_Renderer * &rendere
     window = SDL_CreateWindow("Dashboard",
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               WINDOW_WIDTH, WINDOW_HEIGHT,
-                              SDL_WINDOW_SHOWN);
+                              SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
     
     if(window == nullptr) {
         printf("Window could not be created: %s\n", SDL_GetError());
@@ -53,6 +53,16 @@ bool setup(SDL_Window * &window, SDL_Surface * &surface, SDL_Renderer * &rendere
     if(!renderer) {
         printf("Can't initialise rendererer. %s\n", SDL_GetError());
         exit(-1);
+    }
+
+    //Configure Hi-DPI mode
+    int render_width, render_height;
+    SDL_GetRendererOutputSize(renderer, &render_width, &render_height);
+    if(render_width != WINDOW_WIDTH) {
+        float width_scale = render_width / WINDOW_WIDTH;
+        float height_scale = render_height / WINDOW_HEIGHT;
+
+        SDL_RenderSetScale(renderer, width_scale, height_scale);
     }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
