@@ -138,6 +138,7 @@ namespace assets {          //this order follows the design order bottom-up
     SDL_Texture *outer_sweep;
     SDL_Texture *inner_sweep;
     array<SDL_Texture *, 10> speedometer_digits;
+    SDL_Texture *speedometer_unit;
 }
 
 /*
@@ -189,6 +190,8 @@ void load_assets(SDL_Renderer * &renderer) {
 
     assets::outer_sweep = load_optimized_asset(renderer, "assets/outer_sweep.png");
     assets::inner_sweep = load_optimized_asset(renderer, "assets/inner_sweep.png");
+
+    assets::speedometer_unit = load_optimized_asset(renderer, "assets/speedometer/KMH.png");
 }
 
 void draw_base(SDL_Renderer * &renderer) {
@@ -260,6 +263,16 @@ void draw_speedometer(SDL_Renderer * &renderer, int rpm) {
     if(speed >= 10)
         SDL_RenderCopyF(renderer, ten, NULL, &tens_target);
     SDL_RenderCopyF(renderer, unit, NULL, &units_target);
+
+    int sunitx, sunity;
+    SDL_QueryTexture(speedometer_unit, nullptr, nullptr, &sunitx, &sunity);
+    SDL_FRect speed_unit_target = {
+        .x = static_cast<float>((WINDOW_WIDTH - sunitx) / 2),
+        .y = static_cast<float>((WINDOW_HEIGHT + teny) / 2 + 10),
+        .w = static_cast<float>(sunitx),
+        .h = static_cast<float>(sunity)
+    };
+    SDL_RenderCopyF(renderer, speedometer_unit, NULL, &speed_unit_target);
 }
 
 int main() {
