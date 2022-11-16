@@ -17,6 +17,9 @@ const int power = 10;
 
 const int MAX_SPEED = 75;
 
+/*
+ *  Converts given RPMs to the angle (in degrees) the needle should turn to.
+ */
 float needle_angle(float target_rpm) {
     const float base_angle = -30;
 
@@ -135,8 +138,7 @@ bool event_loop() {
 namespace assets {          //this order follows the design order bottom-up
     SDL_Texture *base;
     SDL_Texture *needle;
-    SDL_Texture *outer_sweep;
-    SDL_Texture *inner_sweep;
+    SDL_Texture *sweep;
     array<SDL_Texture *, 10> speedometer_digits;
     SDL_Texture *speedometer_unit;
 }
@@ -188,8 +190,7 @@ void load_assets(SDL_Renderer * &renderer) {
     assets::base = load_optimized_asset(renderer, "assets/base.png");
     assets::needle = load_optimized_asset(renderer, "assets/needle.png");
 
-    assets::outer_sweep = load_optimized_asset(renderer, "assets/outer_sweep.png");
-    assets::inner_sweep = load_optimized_asset(renderer, "assets/inner_sweep.png");
+    assets::sweep = load_optimized_asset(renderer, "assets/sweep.png");
 
     assets::speedometer_unit = load_optimized_asset(renderer, "assets/speedometer/KMH.png");
 }
@@ -199,32 +200,42 @@ void draw_base(SDL_Renderer * &renderer) {
     SDL_RenderCopy(renderer, assets::base, NULL, &base_pos);
 };
 
-SDL_Texture *sweep;
-SDL_Texture *sweep_mask;
+/*
+ *  Creates a new texture in the specified renderer context, of the window dimensions.
+ */
+SDL_Texture *create_canvas_texture(SDL_Renderer * &renderer) {
+    SDL_Texture *t = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_TARGET, WINDOW_WIDTH, WINDOW_HEIGHT);
+    assert(t);
+    SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+
+    return t;
+}
+
 void draw_sweep(SDL_Renderer * &renderer, int rpm) {
-    /* Prepare arc mask */
-    SDL_SetRenderTarget(renderer, sweep_mask);
+    static SDL_Texture *clip_sweep = create_canvas_texture(renderer);
+
+    int angle = static_cast<int>(needle_angle(rpm));
+    int quadrant = (angle + 90) / 90;
+
+    SDL_Rect clip = {
+        .x = 0,
+        .y = WINDOW_HEIGHT / 2,
+        .w = WINDOW_WIDTH / 2,
+        .h = WINDOW_HEIGHT / 2
+    };
+
+    // Set clip sweep as current render target, and clear it
+    SDL_SetRenderTarget(renderer, clip_sweep);
     clear_render_context(renderer);
-    filledPieRGBA(renderer, 250, 250, 250, 150, needle_angle(rpm) - 180, 0xff, 0xff, 0xff, 0xff);   //outer arc
-
-    //Render onto sweep texture
-    SDL_SetRenderTarget(renderer, sweep);
-    clear_render_context(renderer);
-
-    //Copy full arcs
-    static SDL_FRect outer_sweep_pos = {.x=0, .y=0, .w=500, .h=376};
-    SDL_RenderCopyF(renderer, assets::outer_sweep, NULL, &outer_sweep_pos);
-    static SDL_FRect inner_sweep_pos = {.x=37, .y=41, .w=426.4, .h=316.6};
-    SDL_RenderCopyF(renderer, assets::inner_sweep, NULL, &inner_sweep_pos);
-
-    //Apply mask
-    SDL_RenderCopy(renderer, sweep_mask, NULL, NULL);
+    
+    // Copy sweep base into texture
+    SDL_RenderCopy(renderer, assets::sweep, &clip, NULL);
 
     //Reset drawing target to window context
     SDL_SetRenderTarget(renderer, nullptr);
 
     //Render texture onto window
-    SDL_RenderCopy(renderer, sweep, NULL, NULL);
+    SDL_RenderCopy(renderer, clip_sweep, NULL, NULL);
 };
 
 void draw_needle(SDL_Renderer * &renderer, int rpm) {
@@ -295,14 +306,6 @@ int main() {
 
     load_assets(renderer);
 
-    sweep = SDL_CreateTexture(renderer, SDL_GetWindowPixelFormat(window), SDL_TEXTUREACCESS_TARGET, 500, 500);
-    assert(sweep);
-    SDL_SetTextureBlendMode(sweep, SDL_BLENDMODE_BLEND);
-
-    sweep_mask = SDL_CreateTexture(renderer, SDL_GetWindowPixelFormat(window), SDL_TEXTUREACCESS_TARGET, 500, 500);
-    assert(sweep_mask != nullptr);
-    SDL_SetTextureBlendMode(sweep_mask, SDL_BLENDMODE_MOD);
-
     SDL_RenderPresent(renderer);
 
     /* process event loop */
@@ -310,8 +313,11 @@ int main() {
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xff);
         SDL_RenderClear(renderer);
 
-        draw_base(renderer);
+        //draw_base(renderer);
 
+        draw_sweep(renderer, revs);
+
+    /*
         draw_needle(renderer, revs);
         if(revving) rev_up();
         else        rev_down();
@@ -320,6 +326,7 @@ int main() {
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);  //60 fps
+    */
     }
 
 
