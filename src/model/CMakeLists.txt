@@ -1,7 +1,9 @@
 target_sources(dashboard
     PRIVATE
-        model.cc
+        linear.cc
+        linear.h
         model.h
     PUBLIC
         model.h
+        linear.h
 )

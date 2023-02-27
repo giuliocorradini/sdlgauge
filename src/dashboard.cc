@@ -4,7 +4,7 @@
 #include "rasterizer.h"
 #include "gauge.h"
 #include "graphics.h"
-#include "model/model.h"
+#include "model/linear.h"
 
 using namespace std;
 
@@ -51,6 +51,7 @@ bool event_loop() {
 }
 
 int main() {
+    LinearModel model(power);
 
     /* SDL object reference */
     //Renderer (GPU abstraction)
@@ -74,17 +75,17 @@ int main() {
 
     /* process event loop */
     while(!event_loop()) {
-        if(revving) rev_up();
-        else        rev_down();
+        if(revving) model.rev_up();
+        else        model.rev_down();
 
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xff);
         SDL_RenderClear(renderer);
 
         draw_base(renderer);
-        draw_sweep(renderer, get_revs());
+        draw_sweep(renderer, model.get_revs());
         draw_headup(renderer);
-        draw_needle(renderer, get_revs());
-        draw_speedometer(renderer, get_revs());
+        draw_needle(renderer, model.get_revs());
+        draw_speedometer(renderer, model.get_revs());
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);  //60 fps

@@ -1,5 +1,6 @@
 #pragma once
 
-void rev_up();
-void rev_down();
-int get_revs();
+class Model {
+    public:
+        virtual int get_revs() = 0;
+};
