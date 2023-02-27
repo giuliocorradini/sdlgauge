@@ -141,6 +141,7 @@ namespace assets {          //this order follows the design order bottom-up
     SDL_Texture *sweep;
     array<SDL_Texture *, 10> speedometer_digits;
     SDL_Texture *speedometer_unit;
+    SDL_Texture *headup;
 }
 
 /*
@@ -157,7 +158,9 @@ void clear_render_context(SDL_Renderer * &renderer) {
  */
 SDL_Texture *load_optimized_asset(SDL_Renderer * &renderer, const char *path) {
     SDL_Texture *texture = IMG_LoadTexture(renderer, path);
-    assert(texture);
+    if(!texture) {
+        printf("%s\n", SDL_GetError());
+    }
 
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
 
@@ -193,6 +196,8 @@ void load_assets(SDL_Renderer * &renderer) {
     assets::sweep = load_optimized_asset(renderer, "assets/sweep.png");
 
     assets::speedometer_unit = load_optimized_asset(renderer, "assets/speedometer/KMH.png");
+
+    assets::headup = load_optimized_asset(renderer, "assets/headup.png");
 }
 
 void draw_base(SDL_Renderer * &renderer) {
@@ -211,30 +216,126 @@ SDL_Texture *create_canvas_texture(SDL_Renderer * &renderer) {
     return t;
 }
 
-void draw_sweep(SDL_Renderer * &renderer, int rpm) {
-    static SDL_Texture *clip_sweep = create_canvas_texture(renderer);
-
-    int angle = static_cast<int>(needle_angle(rpm));
-    int quadrant = (angle + 90) / 90;
-
-    SDL_Rect clip = {
-        .x = 0,
-        .y = WINDOW_HEIGHT / 2,
+void get_clip_for_quadrant(SDL_Rect &clip, int quadrant) {
+    clip = {
+        .x = quadrant < 2 ? 0 : WINDOW_WIDTH / 2,
+        .y = (quadrant == 0 || quadrant == 3) ? WINDOW_HEIGHT / 2 : 0,
         .w = WINDOW_WIDTH / 2,
-        .h = WINDOW_HEIGHT / 2
+        .h =  WINDOW_HEIGHT / 2
     };
+}
 
+void copy_clipped_sweep_on_canvas(SDL_Renderer * &renderer, SDL_Texture * &canvas, SDL_Rect &clip) {
     // Set clip sweep as current render target, and clear it
-    SDL_SetRenderTarget(renderer, clip_sweep);
-    clear_render_context(renderer);
-    
+    SDL_SetRenderTarget(renderer, canvas);
+
     // Copy sweep base into texture
-    SDL_RenderCopy(renderer, assets::sweep, &clip, NULL);
+    SDL_RenderSetClipRect(renderer, &clip);
+    SDL_RenderCopy(renderer, assets::sweep, NULL, NULL);
 
     //Reset drawing target to window context
     SDL_SetRenderTarget(renderer, nullptr);
+}
 
-    //Render texture onto window
+void getMaskForQuadrant(int angle, int quadrant, int16_t tx[], int16_t ty[]) {
+    static const float radius = WINDOW_HEIGHT / 2;
+    float rad_angle = angle * M_PI / 180;
+    switch(quadrant) {
+        case 0:
+            tx[0] = WINDOW_WIDTH/2, ty[0] = WINDOW_HEIGHT/2;
+            tx[1] = WINDOW_WIDTH/2, ty[1] = WINDOW_HEIGHT;
+            tx[2] = 0, ty[2] = WINDOW_HEIGHT;
+            tx[3] = 0, ty[3] = WINDOW_HEIGHT/2 - radius * tan(rad_angle);
+            break;
+        case 1:
+            tx[0] = WINDOW_WIDTH/2, ty[0] = WINDOW_HEIGHT/2;
+            tx[1] = 0, ty[1] = WINDOW_HEIGHT/2;
+            tx[2] = 0, ty[2] = 0;
+            tx[3] = angle < 45 ? 0 : WINDOW_WIDTH/2 - radius / tan(rad_angle), ty[3] = angle < 45 ? WINDOW_HEIGHT/2 - radius * tan(rad_angle) : 0;
+            break;
+        case 2:
+            tx[0] = WINDOW_WIDTH/2, ty[0] = WINDOW_HEIGHT/2;
+            tx[1] = WINDOW_WIDTH/2, ty[1] = 0;
+            tx[2] = WINDOW_WIDTH, ty[2] = 0;
+            tx[3] = angle < 135 ? WINDOW_WIDTH/2 - radius / tan(rad_angle) : WINDOW_WIDTH, ty[3] = angle < 135 ? 0 : WINDOW_HEIGHT/2 + radius * tan(rad_angle);
+            break;
+        case 3:
+            tx[0] = WINDOW_WIDTH/2, ty[0] = WINDOW_HEIGHT/2;
+            tx[1] = WINDOW_WIDTH, ty[1] = WINDOW_HEIGHT/2;
+            tx[2] = WINDOW_WIDTH, ty[2] = WINDOW_HEIGHT/2 + radius * tan(rad_angle);
+            tx[3] = WINDOW_WIDTH/2, ty[3] = WINDOW_HEIGHT/2;
+            break;
+    }
+}
+
+void prepareMask(SDL_Renderer * &renderer, SDL_Texture * &mask, int angle, int quadrant) {
+    // Draw the last part of the sweep with masking
+    SDL_SetRenderTarget(renderer, mask);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderFillRect(renderer, nullptr);
+
+    //The coordinates already refer to a WINDOW_WIDTH * WINDOW_HEIGHT canvas
+    int16_t tx[4], ty[4];
+    getMaskForQuadrant(angle, quadrant, tx, ty);
+    filledPolygonColor(
+        renderer,
+        tx,
+        ty,
+        4,
+        0xffffffff
+    );
+    SDL_SetRenderTarget(renderer, nullptr);
+}
+
+
+void draw_sweep(SDL_Renderer * &renderer, int rpm) {
+    int angle = static_cast<int>(needle_angle(rpm));
+    int quadrant = (angle + 90) / 90;
+
+    
+    // Draw the part of sweep that don't require masking
+    SDL_Rect clip;
+    for(int i=0; i<quadrant; i++) {
+        SDL_Texture *quad_texture = create_canvas_texture(renderer);
+
+        // Copy sweep on canvas
+        get_clip_for_quadrant(clip, i);
+        copy_clipped_sweep_on_canvas(renderer, quad_texture, clip);
+
+        //  Then copy it on the actual renderer
+        SDL_RenderCopy(renderer, quad_texture, NULL, NULL);
+    }
+    
+
+    static SDL_Texture *clip_sweep = create_canvas_texture(renderer);
+    static SDL_Texture *mask = create_canvas_texture(renderer);
+    SDL_SetTextureBlendMode(
+        mask,
+        SDL_ComposeCustomBlendMode(
+            SDL_BLENDFACTOR_ZERO,   //src*0
+            SDL_BLENDFACTOR_SRC_COLOR,  //dst*src
+            SDL_BLENDOPERATION_ADD,  //dst*src+src*0 = dst*src
+            SDL_BLENDFACTOR_ZERO,
+            SDL_BLENDFACTOR_SRC_ALPHA,
+            SDL_BLENDOPERATION_ADD
+        )
+    );
+    //SDL_SetTextureBlendMode(clip_sweep, SDL_BLENDMODE_MOD);
+
+    prepareMask(renderer, mask, angle, quadrant);
+
+    SDL_SetRenderTarget(renderer, clip_sweep);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderFillRect(renderer, nullptr);
+    SDL_Rect quadclip;
+    get_clip_for_quadrant(quadclip, quadrant);
+
+    // Copy sweep base into texture
+    SDL_RenderCopy(renderer, assets::sweep, nullptr, nullptr);
+    SDL_RenderCopy(renderer, mask, nullptr, nullptr);
+
+    SDL_SetRenderTarget(renderer, nullptr);
+
     SDL_RenderCopy(renderer, clip_sweep, NULL, NULL);
 };
 
@@ -286,6 +387,11 @@ void draw_speedometer(SDL_Renderer * &renderer, int rpm) {
     SDL_RenderCopyF(renderer, speedometer_unit, NULL, &speed_unit_target);
 }
 
+void draw_headup(SDL_Renderer * &renderer) {
+    static SDL_Rect base_pos = {.x=0, .y=0, .w=500, .h=500};
+    SDL_RenderCopy(renderer, assets::headup, NULL, &base_pos);
+}
+
 int main() {
 
     /* SDL object reference */
@@ -313,11 +419,10 @@ int main() {
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xff);
         SDL_RenderClear(renderer);
 
-        //draw_base(renderer);
+        draw_base(renderer);
 
         draw_sweep(renderer, revs);
-
-    /*
+        draw_headup(renderer);
         draw_needle(renderer, revs);
         if(revving) rev_up();
         else        rev_down();
@@ -326,7 +431,6 @@ int main() {
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);  //60 fps
-    */
     }
 
 
