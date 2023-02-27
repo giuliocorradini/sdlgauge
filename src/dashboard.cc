@@ -4,23 +4,11 @@
 #include "rasterizer.h"
 #include "gauge.h"
 #include "graphics.h"
+#include "model/model.h"
 
 using namespace std;
 
 bool revving = false;
-int revs = 0;
-
-void rev_up() {
-    revs += power;
-    if(revs >= 6000)
-        revs = 6000;
-}
-
-void rev_down() {
-    revs -= power;
-    if(revs < 0)
-        revs = 0;
-}
 
 void process_key_fsm(SDL_KeyboardEvent &e) {
     static int status = 0;
@@ -93,10 +81,10 @@ int main() {
         SDL_RenderClear(renderer);
 
         draw_base(renderer);
-        draw_sweep(renderer, revs);
+        draw_sweep(renderer, get_revs());
         draw_headup(renderer);
-        draw_needle(renderer, revs);
-        draw_speedometer(renderer, revs);
+        draw_needle(renderer, get_revs());
+        draw_speedometer(renderer, get_revs());
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);  //60 fps

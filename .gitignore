@@ -1,3 +1,6 @@
 .vscode
 bin
 build
+
+# you might create a symbolic link to the built binary, don't include it
+dashboard

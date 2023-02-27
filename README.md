@@ -14,7 +14,7 @@ With brew:
 brew install cmake sdl2 sdl2_image sdl2_gfx
 ```
 
-## Compiling
+## Compiling
 
 Like any Cmake-based project, create a new directory named `build` and enter it. Then start Cmake configuration
 and start compiling with Make.
